@@ -5,8 +5,12 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:KiCadExcelBridge"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:conv="clr-namespace:KiCadExcelBridge.Converters"
         mc:Ignorable="d"
         Title="KiCad Database Library Configuration" Height="450" Width="800">
+    <Window.Resources>
+        <conv:PathToDisplayConverter x:Key="PathToDisplayConverter" />
+    </Window.Resources>
     <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
@@ -23,11 +27,17 @@
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <ListBox x:Name="SourceFilesList" Grid.Row="0"/>
+                <ListBox x:Name="SourceFilesList" Grid.Row="0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Converter={StaticResource PathToDisplayConverter}}" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
                 <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="5">
-                    <Button Content="+ Add File..." Margin="5" Click="AddFile_Click"/>
-                    <Button Content="- Remove File" Margin="5" Click="RemoveFile_Click"/>
-                    <Button Content="⟳ Refresh" Margin="5" Click="RefreshFiles_Click"/>
+                    <Button Content="+" Width="36" Height="36" Margin="6" Click="AddFile_Click" ToolTip="Add File" Padding="0" FontSize="16" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                    <Button Content="-" Width="36" Height="36" Margin="6" Click="RemoveFile_Click" ToolTip="Remove File" Padding="0" FontSize="16" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                    <Button Content="⟳" Width="36" Height="36" Margin="6" Click="RefreshFiles_Click" ToolTip="Refresh" Padding="0" FontSize="16" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
                 </StackPanel>
             </Grid>
         </GroupBox>
@@ -40,7 +50,7 @@
                 </Grid.RowDefinitions>
                 <DataGrid x:Name="SheetMappingsGrid" Grid.Row="0" AutoGenerateColumns="False" CanUserDeleteRows="False" PreviewKeyDown="SheetMappingsGrid_PreviewKeyDown">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Source File" Binding="{Binding SourceFile}" IsReadOnly="True" Width="*"/>
+                        <DataGridTextColumn Header="Source File" Binding="{Binding SourceFile, Converter={StaticResource PathToDisplayConverter}}" IsReadOnly="True" Width="*"/>
                         <DataGridTextColumn Header="Sheet Name" Binding="{Binding SheetName}" IsReadOnly="True" Width="*"/>
                         <DataGridTextColumn Header="Category Label" Binding="{Binding CategoryLabel}" Width="*"/>
                         <DataGridCheckBoxColumn Header="Ignore First Row" Binding="{Binding IgnoreHeader}" Width="140"/>
