@@ -10,6 +10,9 @@ The KiCad Excel Bridge is a .NET 9 WPF application designed to facilitate the in
 - **Field Mapping UI**: Allows users to map fields, add/remove custom fields, and preview data.
 - **Robust ID System**: Ensures unique category and part IDs.
 
+<img width="786" height="443" alt="image" src="https://github.com/user-attachments/assets/9c6484bb-6888-40bd-af38-fe0c5e4d810e" />
+<img width="836" height="493" alt="image" src="https://github.com/user-attachments/assets/90402bbf-75ec-48bf-bb2e-f8dcb1c9e247" />
+
 ## Prerequisites
 - **.NET 9 SDK**: Ensure you have the .NET 9 SDK installed.
 - **PowerShell**: For running the provided query scripts.
