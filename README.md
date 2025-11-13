@@ -72,3 +72,28 @@ To integrate the HTTP library with KiCad:
 6. Set a Nickname for the library and confirm.
 
 Once added, the HTTP library will be available for use in KiCad.
+
+## Installer
+
+This project includes an [Inno Setup](https://jrsoftware.org/isinfo.php) script to create a Windows installer.
+
+### Prerequisites
+- **Inno Setup**: You must have Inno Setup installed.
+
+### Creating the Installer
+1. **Publish the application**:
+   First, publish the application to a single-file executable.
+   ```powershell
+   dotnet publish -c Release -r win-x64 --self-contained true
+   ```
+   This will create the executable in `bin\Release\net9.0-windows\win-x64\publish\`.
+
+2. **Compile the setup script**:
+   - Open the `installer\setup.iss` file in the Inno Setup Compiler.
+   - Click `Build -> Compile` (or press F9).
+   - The installer (`KiCadExcelBridge-1.0.0-setup.exe`) will be created in the project's root directory.
+
+The installer will:
+- Install the application to the user's `Program Files` folder.
+- Optionally create a desktop icon.
+- Optionally configure the application to run at Windows startup.
