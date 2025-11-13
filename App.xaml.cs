@@ -101,6 +101,33 @@ public partial class App : Application
             _httpServer = new HttpServer(serverUrl, new HttpHandler(_excelManager).HandleRequestAsync);
             Task.Run(() => _httpServer.Start());
             try { AppendStartupLog($"HTTP server started on {serverUrl} {DateTime.UtcNow:u}\r\n"); } catch { }
+
+            // Recreate `library.kicad_httplib` so KiCad can pick up the HTTP library using the configured port.
+            try
+            {
+                var lib = new
+                {
+                    meta = new { version = 1.0 },
+                    name = "KiCad HTTP Library",
+                    description = "A KiCad library sourced from a REST API",
+                    source = new
+                    {
+                        type = "REST_API",
+                        api_version = "v1",
+                        root_url = $"http://localhost:{config.ServerPort}/kicad-api",
+                        token = "usertokendatastring",
+                        timeout_parts_seconds = 60,
+                        timeout_categories_seconds = 6000
+                    }
+                };
+                var json = System.Text.Json.JsonSerializer.Serialize(lib, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "library.kicad_httplib");
+                File.WriteAllText(path, json);
+            }
+            catch
+            {
+                // Don't let library file issues prevent startup; best-effort only
+            }
         }
         catch (Exception ex)
         {
