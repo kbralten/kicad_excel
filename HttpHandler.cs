@@ -27,11 +27,9 @@ namespace KiCadExcelBridge
             // Log incoming request for troubleshooting (best-effort)
             try
             {
-                var basePath = AppDomain.CurrentDomain.BaseDirectory ?? ".";
-                var logPath = System.IO.Path.Combine(basePath, "http_requests.log");
                 var segs = url?.Segments != null ? string.Join("|", url.Segments) : string.Empty;
                 var line = $"[{DateTime.UtcNow:u}] Request: {url?.AbsoluteUri} Path: {url?.AbsolutePath} Segments: {segs}\r\n";
-                System.IO.File.AppendAllText(logPath, line);
+                AppendRequestLog(line);
             }
             catch
             {
@@ -100,12 +98,9 @@ namespace KiCadExcelBridge
             {
                 try
                 {
-                    // Log exception details to the http_requests.log for debugging
-                    var basePath = AppDomain.CurrentDomain.BaseDirectory ?? ".";
-                    var logPath = System.IO.Path.Combine(basePath, "http_requests.log");
                     var segs = request?.Url?.Segments != null ? string.Join("|", request.Url.Segments) : string.Empty;
                     var exLine = $"[{DateTime.UtcNow:u}] ERROR handling request {request?.HttpMethod} {request?.Url?.AbsoluteUri} Segments: {segs} Exception: {ex}\r\n";
-                    System.IO.File.AppendAllText(logPath, exLine);
+                    AppendRequestLog(exLine);
                 }
                 catch
                 {
@@ -137,13 +132,10 @@ namespace KiCadExcelBridge
 
                 try
                 {
-                    var basePath = AppDomain.CurrentDomain.BaseDirectory ?? ".";
-                    var logPath = System.IO.Path.Combine(basePath, "http_requests.log");
                     var req = context.Request;
-                    var segs = req?.Url?.Segments != null ? string.Join("|", req.Url.Segments) : string.Empty;
                     var bodyPreview = string.IsNullOrEmpty(json) ? "<empty>" : (json.Length > 2000 ? json.Substring(0, 2000) + "...(truncated)" : json);
                     var line = $"[{DateTime.UtcNow:u}] Response: {req?.HttpMethod} {req?.Url?.AbsoluteUri} Status: {statusCode} ContentType: {contentType} BodyLen: {buffer.Length}\r\n{bodyPreview}\r\n";
-                    System.IO.File.AppendAllText(logPath, line);
+                    AppendRequestLog(line);
                 }
                 catch
                 {
@@ -154,6 +146,21 @@ namespace KiCadExcelBridge
             {
                 // If writing fails, attempt to at least set status code
                 try { response.StatusCode = statusCode; } catch { }
+            }
+        }
+
+        [System.Diagnostics.Conditional("DEBUG")]
+        private static void AppendRequestLog(string line)
+        {
+            try
+            {
+                var basePath = AppDomain.CurrentDomain.BaseDirectory ?? ".";
+                var logPath = System.IO.Path.Combine(basePath, "http_requests.log");
+                System.IO.File.AppendAllText(logPath, line);
+            }
+            catch
+            {
+                // ignore logging failures
             }
         }
 

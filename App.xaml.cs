@@ -25,8 +25,8 @@ public partial class App : Application
         // When running as a tray app with no visible windows, prevent the application
         // from shutting down automatically when there are no windows open.
         this.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-        // Log startup entry for diagnostics
-        try { var _ = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "startup.log"); File.AppendAllText(_ , $"OnStartup entered {DateTime.UtcNow:u}\r\n"); } catch { }
+        // Log startup entry for diagnostics (only in DEBUG builds)
+        try { AppendStartupLog($"OnStartup entered {DateTime.UtcNow:u}\r\n"); } catch { }
 
         // Global exception handlers to capture startup/runtime errors and log them for debugging
         this.DispatcherUnhandledException += App_DispatcherUnhandledException;
@@ -100,7 +100,7 @@ public partial class App : Application
             var serverUrl = $"http://localhost:{config.ServerPort}/kicad-api/";
             _httpServer = new HttpServer(serverUrl, new HttpHandler(_excelManager).HandleRequestAsync);
             Task.Run(() => _httpServer.Start());
-            try { var _ = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "startup.log"); File.AppendAllText(_, $"HTTP server started on {serverUrl} {DateTime.UtcNow:u}\r\n"); } catch { }
+            try { AppendStartupLog($"HTTP server started on {serverUrl} {DateTime.UtcNow:u}\r\n"); } catch { }
         }
         catch (Exception ex)
         {
@@ -127,6 +127,7 @@ public partial class App : Application
         LogException("TaskScheduler_UnobservedTaskException", e.Exception);
     }
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private static void LogException(string context, Exception ex)
     {
         try
@@ -148,6 +149,17 @@ public partial class App : Application
         {
             // swallow logging errors
         }
+    }
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private static void AppendStartupLog(string line)
+    {
+        try
+        {
+            var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "startup.log");
+            File.AppendAllText(path, line);
+        }
+        catch { }
     }
 
     private void OnFileSelectionChanged(List<string> filePaths, List<SheetMapping> sheetMappings)
