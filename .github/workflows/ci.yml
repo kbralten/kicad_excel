@@ -56,12 +56,7 @@ jobs:
           name: app-publish
           path: bin/Release/net9.0-windows/win-x64/publish
 
-      - name: Install Inno Setup (winget)
-        shell: pwsh
-        run: |
-          winget install --id JRSoftware.InnoSetup --accept-package-agreements --accept-source-agreements --silent
-
-      - name: Locate ISCC.exe
+      - name: Ensure Inno Setup and locate ISCC.exe
         id: iscc
         shell: pwsh
         run: |
@@ -69,13 +64,25 @@ jobs:
             "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe",
             "$Env:LOCALAPPDATA\\Programs\\Inno Setup 6\\ISCC.exe"
           )
-          $path = $null
-          foreach ($c in $candidates) { if (Test-Path $c) { $path = $c; break } }
+          # Try existing locations first
+          $path = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $path) {
+            Write-Host "ISCC.exe not found in common paths. Attempting to install via winget..."
+            # Install Inno Setup (silent). If it's already present, winget will skip/upgrade.
+            winget install --id JRSoftware.InnoSetup --accept-package-agreements --accept-source-agreements --silent || Write-Host "winget install returned non-zero; continuing to search for ISCC.exe"
+            # Re-check common locations
+            $path = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $path) {
+            # Do a broader search as a fallback
             $found = Get-ChildItem -Path "C:\\Program Files (x86)", "C:\\Program Files", "$Env:LOCALAPPDATA" -Recurse -Filter ISCC.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
             if ($found) { $path = $found }
           }
-          if (-not $path) { Write-Error "ISCC.exe not found"; exit 1 }
+          if (-not $path) {
+            Write-Error "ISCC.exe not found after attempted install/search"
+            exit 1
+          }
+          Write-Host "Found ISCC at: $path"
           echo "iscc_path=$path" >> $Env:GITHUB_OUTPUT
 
       - name: Compile installer
