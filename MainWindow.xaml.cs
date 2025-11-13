@@ -367,11 +367,10 @@ public partial class MainWindow : Window
 
         var filePaths = _sourceFiles.ToList();
 
-        var config = new AppConfiguration
-        {
-            SourceFiles = filePaths,
-            SheetMappings = _sheetMappings.ToList()
-        };
+        // Load existing config to preserve settings like prefixes and port
+        var config = ConfigurationManager.Load();
+        config.SourceFiles = filePaths;
+        config.SheetMappings = _sheetMappings.ToList();
         ConfigurationManager.Save(config);
 
         OnFileSelectionChanged?.Invoke(filePaths, _sheetMappings.ToList());
