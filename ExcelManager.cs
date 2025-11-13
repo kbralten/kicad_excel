@@ -276,18 +276,20 @@ namespace KiCadExcelBridge
                 foreach (var row in sheetData)
                 {
                     var candidateId = GetRowValue(row, idColumn);
-                    if (!string.Equals(candidateId, rawId, StringComparison.OrdinalIgnoreCase))
+                    // Compare slugified candidate id to the slug provided in the request
+                    var candidateSlug = Slugify(candidateId);
+                    if (!string.Equals(candidateSlug, rawId, StringComparison.OrdinalIgnoreCase))
                     {
                         continue;
                     }
 
                     var fields = BuildFieldDictionary(sheet, row);
 
-                    // name should come from PartNumber (fall back to rawId)
+                    // name should come from PartNumber (fall back to the original ID value from the sheet)
                     var partName = GetFieldValue(sheet, row, "PartNumber");
                     if (string.IsNullOrWhiteSpace(partName))
                     {
-                        partName = rawId;
+                        partName = candidateId;
                     }
 
                     // Load configuration to get prefixes
@@ -380,7 +382,9 @@ namespace KiCadExcelBridge
         {
             var lib = library?.Trim() ?? string.Empty;
             var id = rawId?.Trim() ?? string.Empty;
-            return string.IsNullOrEmpty(lib) ? id : $"{lib}:{id}";
+            // Slugify the part id to ensure URL-safe identifiers (no spaces/unsafe chars)
+            var slug = Slugify(id);
+            return string.IsNullOrEmpty(lib) ? slug : $"{lib}:{slug}";
         }
 
         private static (string library, string rawId) SplitPartId(string partId)
