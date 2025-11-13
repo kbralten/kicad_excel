@@ -68,6 +68,8 @@
         </GroupBox>
 
         <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="5">
+            <Button Content="Settings..." Margin="5" Click="Settings_Click" HorizontalAlignment="Left"/>
+            <Rectangle Width="1" Fill="LightGray" Margin="5,0"/>
             <Button Content="OK" Margin="5" Click="Ok_Click"/>
             <Button Content="Cancel" Margin="5" Click="Cancel_Click"/>
             <Button Content="Apply" Margin="5" Click="Apply_Click"/>

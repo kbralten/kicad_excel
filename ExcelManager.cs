@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace KiCadExcelBridge
 {
@@ -60,30 +61,60 @@ namespace KiCadExcelBridge
 
         private static List<Dictionary<int, string>> LoadWorksheetRows(string filePath, SheetMapping mapping)
         {
-            using var package = new ExcelPackage(new FileInfo(filePath));
-            var worksheet = package.Workbook.Worksheets[mapping.SheetName];
             var rows = new List<Dictionary<int, string>>();
-            if (worksheet == null || worksheet.Dimension == null)
+            try
             {
-                return rows;
-            }
-
-            var endRow = worksheet.Dimension.End.Row;
-            var endColumn = worksheet.Dimension.End.Column;
-            var startRow = mapping.IgnoreHeader ? 2 : 1;
-            if (startRow > endRow)
-            {
-                return rows;
-            }
-
-            for (int row = startRow; row <= endRow; row++)
-            {
-                var rowData = new Dictionary<int, string>();
-                for (int col = 1; col <= endColumn; col++)
+                var stream = FileHelpers.OpenFileForReadWithFallback(filePath, maxRetries: 4, out var actualPath, out var usedFallback);
+                if (stream == null)
                 {
-                    rowData[col] = worksheet.Cells[row, col].Text?.Trim() ?? string.Empty;
+                    return rows;
                 }
-                rows.Add(rowData);
+
+                using (stream)
+                using (var package = new ExcelPackage(stream))
+                {
+                    var worksheet = package.Workbook.Worksheets[mapping.SheetName];
+                    if (worksheet == null || worksheet.Dimension == null)
+                    {
+                        // cleanup fallback copy if any
+                    }
+                    else
+                    {
+                        var endRow = worksheet.Dimension.End.Row;
+                        var endColumn = worksheet.Dimension.End.Column;
+                        var startRow = mapping.IgnoreHeader ? 2 : 1;
+                        if (startRow <= endRow)
+                        {
+                            for (int row = startRow; row <= endRow; row++)
+                            {
+                                var rowData = new Dictionary<int, string>();
+                                for (int col = 1; col <= endColumn; col++)
+                                {
+                                    rowData[col] = worksheet.Cells[row, col].Text?.Trim() ?? string.Empty;
+                                }
+                                rows.Add(rowData);
+                            }
+                        }
+                    }
+                }
+
+                // If we used a fallback temporary file, attempt to delete it
+                try
+                {
+                    // actualPath set by helper; only delete if it looks like a temp copy
+                    if (!string.IsNullOrEmpty(actualPath) && usedFallback)
+                    {
+                        File.Delete(actualPath);
+                    }
+                }
+                catch
+                {
+                    // ignore deletion errors
+                }
+            }
+            catch
+            {
+                // ignore
             }
 
             return rows;
@@ -92,17 +123,51 @@ namespace KiCadExcelBridge
         private static List<Dictionary<int, string>> LoadCsvRows(string filePath, SheetMapping mapping)
         {
             var rows = new List<Dictionary<int, string>>();
-            var lines = File.ReadAllLines(filePath);
-            var startIndex = mapping.IgnoreHeader ? 1 : 0;
-            for (int i = startIndex; i < lines.Length; i++)
+            try
             {
-                var values = lines[i].Split(',');
-                var rowData = new Dictionary<int, string>();
-                for (int col = 0; col < values.Length; col++)
+                var stream = FileHelpers.OpenFileForReadWithFallback(filePath, maxRetries: 4, out var actualPath, out var usedFallback);
+                if (stream == null)
                 {
-                    rowData[col + 1] = values[col].Trim();
+                    return rows;
                 }
-                rows.Add(rowData);
+
+                using (stream)
+                using (var sr = new StreamReader(stream))
+                {
+                    var lines = new List<string>();
+                    while (!sr.EndOfStream)
+                    {
+                        lines.Add(sr.ReadLine() ?? string.Empty);
+                    }
+
+                    var startIndex = mapping.IgnoreHeader ? 1 : 0;
+                    for (int i = startIndex; i < lines.Count; i++)
+                    {
+                        var values = lines[i].Split(',');
+                        var rowData = new Dictionary<int, string>();
+                        for (int col = 0; col < values.Length; col++)
+                        {
+                            rowData[col + 1] = values[col].Trim();
+                        }
+                        rows.Add(rowData);
+                    }
+                }
+
+                try
+                {
+                    if (!string.IsNullOrEmpty(actualPath) && usedFallback)
+                    {
+                        File.Delete(actualPath);
+                    }
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+            catch
+            {
+                // ignore
             }
 
             return rows;
@@ -112,22 +177,8 @@ namespace KiCadExcelBridge
 
         public IEnumerable<object> GetCategories()
         {
-            var categories = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var mapping in _sheetMappings)
-            {
-                var label = mapping.CategoryLabel?.Trim();
-                if (string.IsNullOrWhiteSpace(label))
-                {
-                    continue;
-                }
-
-                if (!categories.ContainsKey(label))
-                {
-                    categories[label] = label;
-                }
-            }
-
-            return categories.Select(pair => new { id = pair.Key, name = pair.Value, description = string.Empty });
+            var (labelToSlug, slugToLabel) = BuildCategorySlugMaps();
+            return slugToLabel.Select(pair => new { id = pair.Key, name = pair.Value, description = string.Empty });
         }
 
         public IEnumerable<object> GetPartsForCategory(string categoryId)
@@ -136,12 +187,14 @@ namespace KiCadExcelBridge
             {
                 return Enumerable.Empty<object>();
             }
-
             var parts = new List<object>();
+            var (labelToSlug, slugToLabel) = BuildCategorySlugMaps();
             foreach (var sheet in _sheetMappings)
             {
                 var label = sheet.CategoryLabel?.Trim();
-                if (string.IsNullOrWhiteSpace(label) || !string.Equals(label, categoryId, StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrWhiteSpace(label)) continue;
+                if (!labelToSlug.TryGetValue(label, out var labelSlug)) continue;
+                if (!string.Equals(labelSlug, categoryId, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -166,7 +219,7 @@ namespace KiCadExcelBridge
                         continue;
                     }
 
-                    var partId = ComposePartId(label, rawId);
+                    var partId = ComposePartId(labelSlug, rawId);
                     var name = GetFieldValue(sheet, row, "PartNumber");
                     if (string.IsNullOrWhiteSpace(name))
                     {
@@ -175,6 +228,14 @@ namespace KiCadExcelBridge
 
                     var description = GetFieldValue(sheet, row, "Description");
                     var symbolIdStr = GetFieldValue(sheet, row, "Symbol");
+                    
+                    // Apply symbol prefix if configured
+                    var config = ConfigurationManager.Load();
+                    if (!string.IsNullOrWhiteSpace(symbolIdStr) && !string.IsNullOrWhiteSpace(config.SymbolPrefix))
+                    {
+                        symbolIdStr = $"{config.SymbolPrefix}:{symbolIdStr}";
+                    }
+                    
                     parts.Add(new { id = partId, name, description, symbolIdStr });
                 }
             }
@@ -188,12 +249,14 @@ namespace KiCadExcelBridge
             {
                 return null;
             }
-
             var (library, rawId) = SplitPartId(partId);
+            var (labelToSlug, slugToLabel) = BuildCategorySlugMaps();
             foreach (var sheet in _sheetMappings)
             {
                 var label = sheet.CategoryLabel?.Trim();
-                if (string.IsNullOrWhiteSpace(label) || !string.Equals(label, library, StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrWhiteSpace(label)) continue;
+                if (!labelToSlug.TryGetValue(label, out var labelSlug)) continue;
+                if (!string.Equals(labelSlug, library, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -227,21 +290,41 @@ namespace KiCadExcelBridge
                         partName = rawId;
                     }
 
+                    // Load configuration to get prefixes
+                    var config = ConfigurationManager.Load();
+                    
                     // symbolIdStr should be taken from the "Symbol" field
                     var symbolIdStr = GetFieldValue(sheet, row, "Symbol");
+                    if (!string.IsNullOrWhiteSpace(symbolIdStr) && !string.IsNullOrWhiteSpace(config.SymbolPrefix))
+                    {
+                        symbolIdStr = $"{config.SymbolPrefix}:{symbolIdStr}";
+                    }
 
-                    // Exclude PartNumber, ID and Symbol from the fields payload since they are provided separately
-                    var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "PartNumber", "ID", "Symbol" };
+                    // Exclude PartNumber, ID, Symbol, and Footprint from the fields payload since they are provided separately
+                    var exclude = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "PartNumber", "ID", "Symbol", "Footprint" };
                     var fieldsPayload = fields
                         .Where(kvp => !exclude.Contains(kvp.Key))
                         .ToDictionary(
                             kvp => kvp.Key,
-                            kvp => new { value = kvp.Value.value, visible = kvp.Value.visible ? "True" : "False" },
+                            kvp => new { value = ApplyPrefixIfNeeded(kvp.Key, kvp.Value.value, config), visible = kvp.Value.visible ? "True" : "False" },
                             StringComparer.OrdinalIgnoreCase);
+
+                    // Add Footprint field with prefix if it exists and is mapped
+                    var footprintValue = GetFieldValue(sheet, row, "Footprint");
+                    if (!string.IsNullOrWhiteSpace(footprintValue) && !string.IsNullOrWhiteSpace(config.FootprintPrefix))
+                    {
+                        footprintValue = $"{config.FootprintPrefix}:{footprintValue}";
+                    }
+                    
+                    if (fields.ContainsKey("Footprint"))
+                    {
+                        var footprintVisible = fields["Footprint"].visible;
+                        fieldsPayload["Footprint"] = new { value = footprintValue, visible = footprintVisible ? "True" : "False" };
+                    }
 
                     return new
                     {
-                        id = ComposePartId(label, candidateId),
+                        id = ComposePartId(labelSlug, candidateId),
                         name = partName,
                         symbolIdStr = symbolIdStr,
                         exclude_from_bom = "False",
@@ -312,6 +395,77 @@ namespace KiCadExcelBridge
             var library = trimmed.Substring(0, separatorIndex);
             var rawId = trimmed.Substring(separatorIndex + 1);
             return (library, rawId);
+        }
+
+        private static string Slugify(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+            var s = input.Trim().ToLowerInvariant();
+            // Replace non-letter/digit characters with hyphen
+            s = Regex.Replace(s, "[^a-z0-9]+", "-");
+            // Collapse multiple hyphens
+            s = Regex.Replace(s, "-+", "-");
+            // Trim leading/trailing hyphens
+            s = s.Trim('-');
+            return s;
+        }
+
+        private static string ApplyPrefixIfNeeded(string fieldName, string value, AppConfiguration config)
+        {
+            // This helper is for fields in the payload; Footprint is handled separately
+            // but included here for consistency in case it's in the payload
+            if (string.IsNullOrWhiteSpace(value)) return value;
+            
+            if (string.Equals(fieldName, "Footprint", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(config.FootprintPrefix))
+            {
+                return $"{config.FootprintPrefix}:{value}";
+            }
+            
+            return value;
+        }
+
+        private static (Dictionary<string, string> labelToSlug, Dictionary<string, string> slugToLabel) BuildCategorySlugMaps()
+        {
+            var labelToSlug = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var slugToLabel = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var mapping in _GetSheetMappingsStatic())
+            {
+                var label = mapping.CategoryLabel?.Trim();
+                if (string.IsNullOrWhiteSpace(label)) continue;
+
+                if (labelToSlug.ContainsKey(label)) continue;
+
+                var baseSlug = Slugify(label);
+                var slug = baseSlug;
+                var attempt = 1;
+                while (slugToLabel.ContainsKey(slug))
+                {
+                    attempt++;
+                    slug = baseSlug + "-" + attempt.ToString();
+                }
+
+                labelToSlug[label] = slug;
+                slugToLabel[slug] = label;
+            }
+
+            return (labelToSlug, slugToLabel);
+        }
+
+        // Helper to access _sheetMappings from static context in BuildCategorySlugMaps replacement
+        private static IEnumerable<SheetMapping> _GetSheetMappingsStatic()
+        {
+            // The instance _sheetMappings isn't directly accessible from static context; use App's configuration as fallback
+            try
+            {
+                // If there's an ExcelManager instance in App, use it; otherwise load configuration
+                var config = ConfigurationManager.Load();
+                return config.SheetMappings ?? Enumerable.Empty<SheetMapping>();
+            }
+            catch
+            {
+                return Enumerable.Empty<SheetMapping>();
+            }
         }
     }
 }

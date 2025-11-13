@@ -24,44 +24,73 @@ namespace KiCadExcelBridge
                 var extension = Path.GetExtension(filePath);
                 if (extension.Equals(".xlsx", StringComparison.OrdinalIgnoreCase))
                 {
-                    using var package = new ExcelPackage(new FileInfo(filePath));
-                    var worksheet = package.Workbook.Worksheets[sheetName];
-                    if (worksheet == null || worksheet.Dimension == null)
+                    var stream = FileHelpers.OpenFileForReadWithFallback(filePath, maxRetries: 3, out var actualPath, out var usedFallback);
+                    if (stream == null)
                     {
                         return new ExcelPreviewResult(columns, rows);
                     }
 
-                    var endColumn = worksheet.Dimension.End.Column;
-                    var startRow = ignoreHeader ? 2 : 1;
-                    var endRow = Math.Min(worksheet.Dimension.End.Row, startRow + Math.Max(maxRows, 1) - 1);
-
-                    for (int col = 1; col <= endColumn; col++)
+                    using (stream)
+                    using (var package = new ExcelPackage(stream))
                     {
-                        var header = ignoreHeader ? worksheet.Cells[1, col].Text?.Trim() : null;
-                        header = string.IsNullOrWhiteSpace(header) ? null : header;
-                        columns.Add(new ExcelColumnOption
+                        var worksheet = package.Workbook.Worksheets[sheetName];
+                        if (worksheet == null || worksheet.Dimension == null)
                         {
-                            Index = col,
-                            Letter = ColumnIndexToLetter(col),
-                            Header = header
-                        });
-                    }
+                            return new ExcelPreviewResult(columns, rows);
+                        }
 
-                    for (int rowIndex = startRow; rowIndex <= endRow; rowIndex++)
-                    {
-                        var rowDict = new Dictionary<int, string>();
+                        var endColumn = worksheet.Dimension.End.Column;
+                        var startRow = ignoreHeader ? 2 : 1;
+                        var endRow = Math.Min(worksheet.Dimension.End.Row, startRow + Math.Max(maxRows, 1) - 1);
+
                         for (int col = 1; col <= endColumn; col++)
                         {
-                            rowDict[col] = worksheet.Cells[rowIndex, col].Text;
+                            var header = ignoreHeader ? worksheet.Cells[1, col].Text?.Trim() : null;
+                            header = string.IsNullOrWhiteSpace(header) ? null : header;
+                            columns.Add(new ExcelColumnOption
+                            {
+                                Index = col,
+                                Letter = ColumnIndexToLetter(col),
+                                Header = header
+                            });
                         }
-                        rows.Add(rowDict);
+
+                        for (int rowIndex = startRow; rowIndex <= endRow; rowIndex++)
+                        {
+                            var rowDict = new Dictionary<int, string>();
+                            for (int col = 1; col <= endColumn; col++)
+                            {
+                                rowDict[col] = worksheet.Cells[rowIndex, col].Text;
+                            }
+                            rows.Add(rowDict);
+                        }
+                    }
+
+                    try
+                    {
+                        if (!string.IsNullOrEmpty(actualPath) && usedFallback)
+                        {
+                            File.Delete(actualPath);
+                        }
+                    }
+                    catch
+                    {
+                        // ignore deletion errors
                     }
                 }
                 else if (extension.Equals(".csv", StringComparison.OrdinalIgnoreCase))
                 {
                     var maxLines = ignoreHeader ? maxRows + 1 : maxRows;
                     var takeCount = maxLines > 0 ? maxLines : int.MaxValue;
-                    var lines = File.ReadLines(filePath).Take(takeCount).ToList();
+                    var lines = new List<string>();
+                    using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    using (var sr = new StreamReader(fs))
+                    {
+                        for (int i = 0; i < takeCount && !sr.EndOfStream; i++)
+                        {
+                            lines.Add(sr.ReadLine() ?? string.Empty);
+                        }
+                    }
                     if (lines.Count == 0)
                     {
                         return new ExcelPreviewResult(columns, rows);

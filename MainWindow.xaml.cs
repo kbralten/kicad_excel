@@ -93,10 +93,36 @@ public partial class MainWindow : Window
             var newSheets = new List<string>();
             if (Path.GetExtension(filePath).Equals(".xlsx", StringComparison.OrdinalIgnoreCase))
             {
-                using var package = new ExcelPackage(new FileInfo(filePath));
-                foreach (var worksheet in package.Workbook.Worksheets)
+                try
                 {
-                    newSheets.Add(worksheet.Name);
+                    var stream = FileHelpers.OpenFileForReadWithFallback(filePath, maxRetries: 3, out var actualPath, out var usedFallback);
+                    if (stream != null)
+                    {
+                        using (stream)
+                        using (var package = new ExcelPackage(stream))
+                        {
+                            foreach (var worksheet in package.Workbook.Worksheets)
+                            {
+                                newSheets.Add(worksheet.Name);
+                            }
+                        }
+
+                        try
+                        {
+                            if (!string.IsNullOrEmpty(actualPath) && usedFallback)
+                            {
+                                File.Delete(actualPath);
+                            }
+                        }
+                        catch
+                        {
+                            // ignore temp deletion errors
+                        }
+                    }
+                }
+                catch
+                {
+                    // ignore errors reading sheet names from files that may be locked
                 }
             }
             else if (Path.GetExtension(filePath).Equals(".csv", StringComparison.OrdinalIgnoreCase))
@@ -360,6 +386,19 @@ public partial class MainWindow : Window
         else
         {
             FieldMappingDefaults.EnsureDefaults(mapping.FieldMappings);
+        }
+    }
+
+    private void Settings_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SettingsWindow
+        {
+            Owner = this
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            MessageBox.Show("Settings saved. Restart the application for server port changes to take effect.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 

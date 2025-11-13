@@ -97,9 +97,10 @@ public partial class App : Application
         {
             var config = ConfigurationManager.Load();
             _excelManager = new ExcelManager(config.SourceFiles ?? new System.Collections.Generic.List<string>(), config.SheetMappings ?? new System.Collections.Generic.List<SheetMapping>());
-            _httpServer = new HttpServer("http://localhost:8088/kicad-api/", new HttpHandler(_excelManager).HandleRequestAsync);
+            var serverUrl = $"http://localhost:{config.ServerPort}/kicad-api/";
+            _httpServer = new HttpServer(serverUrl, new HttpHandler(_excelManager).HandleRequestAsync);
             Task.Run(() => _httpServer.Start());
-            try { var _ = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "startup.log"); File.AppendAllText(_, $"HTTP server started on http://localhost:8088/kicad-api/ {DateTime.UtcNow:u}\r\n"); } catch { }
+            try { var _ = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "startup.log"); File.AppendAllText(_, $"HTTP server started on {serverUrl} {DateTime.UtcNow:u}\r\n"); } catch { }
         }
         catch (Exception ex)
         {
@@ -153,7 +154,9 @@ public partial class App : Application
     {
         _excelManager = new ExcelManager(filePaths, sheetMappings);
         _httpServer?.Stop();
-        _httpServer = new HttpServer("http://localhost:8088/kicad-api/", new HttpHandler(_excelManager).HandleRequestAsync);
+        var config = ConfigurationManager.Load();
+        var serverUrl = $"http://localhost:{config.ServerPort}/kicad-api/";
+        _httpServer = new HttpServer(serverUrl, new HttpHandler(_excelManager).HandleRequestAsync);
         Task.Run(() => _httpServer.Start());
     }
 
