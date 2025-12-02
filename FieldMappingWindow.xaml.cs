@@ -281,6 +281,7 @@ namespace KiCadExcelBridge
         private string _fieldName;
         private ExcelColumnOption? _selectedColumn;
         private bool _visible;
+        private bool _split;
         private readonly ObservableCollection<ExcelColumnSelection> _columnSelections;
         private ExcelColumnSelection? _selectedColumnSelection;
 
@@ -291,6 +292,7 @@ namespace KiCadExcelBridge
             _onChanged = onChanged;
             _fieldName = model.FieldName;
             _visible = model.Visible;
+            _split = model.Split;
             if (model.ColumnIndex.HasValue)
             {
                 _selectedColumn = columns.FirstOrDefault(c => c.Index == model.ColumnIndex.Value);
@@ -369,6 +371,20 @@ namespace KiCadExcelBridge
             }
         }
 
+        public bool Split
+        {
+            get => _split;
+            set
+            {
+                if (_split != value)
+                {
+                    _split = value;
+                    OnPropertyChanged(nameof(Split));
+                    _onChanged(this);
+                }
+            }
+        }
+
         public bool IsFieldNameEditable => Model.IsCustom;
         public bool CanRemove => Model.IsCustom && !Model.IsRequired;
         public bool IsRequired => Model.IsRequired;
@@ -377,6 +393,7 @@ namespace KiCadExcelBridge
         {
             Model.FieldName = FieldName;
             Model.Visible = Visible;
+            Model.Split = Split;
             Model.ColumnIndex = SelectedColumn?.Index;
             Model.ColumnHeader = SelectedColumn?.Header;
             return Model;

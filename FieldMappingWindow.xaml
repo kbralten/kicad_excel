@@ -66,6 +66,7 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
                     <DataGridCheckBoxColumn Header="Visible" Binding="{Binding Visible, UpdateSourceTrigger=PropertyChanged}" Width="Auto"/>
+                    <DataGridCheckBoxColumn Header="Split" Binding="{Binding Split, UpdateSourceTrigger=PropertyChanged}" Width="Auto"/>
                     <DataGridTemplateColumn Header="" Width="Auto">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>

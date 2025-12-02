@@ -10,6 +10,7 @@ namespace KiCadExcelBridge
         public bool Visible { get; set; } = true;
         public string Category { get; set; } = "Common";
         public bool IsRequired { get; set; }
+        public bool Split { get; set; }
 
         public bool IsCustom => string.Equals(Category, "Custom", StringComparison.OrdinalIgnoreCase) && !IsRequired;
     }
